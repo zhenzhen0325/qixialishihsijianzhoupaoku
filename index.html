@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>七下历史时间轴跑酷游戏</title>
+    <style>
+        /* 配色方案 */
+        :root {
+            --primary-orange: #F98C53; /* 主色调橙 */
+            --light-green: #D2E0AA;   /* 背景绿色 */
+            --light-blue: #ABD7FB;    /* 辅助蓝 */
+            --cream: #F9F2EF;         /* 米白 */
+            --peachy-orange: #FCCEB4; /* 蜜桃橙 */
+            --white: #FFFFFF;
+            --white-trans-low: rgba(255, 255, 255, 0.15);
+            --white-trans-mid: rgba(255, 255, 255, 0.25);
+            --white-trans-high: rgba(255, 255, 255, 0.4);
+            --black-overlay: rgba(0, 0, 0, 0.85);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--light-green) 0%, var(--primary-orange) 100%);
+            color: var(--white);
+            overflow: hidden; /* 防止滚动条 */
+            user-select: none;
+            -webkit-tap-highlight-color: transparent; /* 移除移动端点击高亮 */
+        }
+
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            position: relative;
+        }
+
+        /* 头部信息 (标题和分数) */
+        .header-info {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+        }
+        .game-title { font-size: 36px; font-weight: bold; color: var(--cream); }
+        .score { font-size: 22px; margin-top: 8px; color: var(--cream); }
+        
+        /* 游戏结果提示 (正确/错误) */
+        #result-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 70px;
+            font-weight: bold;
+            z-index: 150;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            text-shadow: 3px 3px 5px rgba(0,0,0,0.5);
+        }
+        #result-message.show { opacity: 1; }
+        #result-message.correct { color: #2ecc71; } /* 鲜绿色 */
+        #result-message.wrong { color: #e74c3c; }   /* 鲜红色 */
+
+
+        /* 左侧游戏区 - 跑道 */
+        .game-area {
+            flex: 1; /* 占据剩余空间 */
+            display: flex;
+            position: relative;
+            overflow: hidden;
+            border-right: 4px solid var(--white); /* 加粗分隔线 */
+        }
+
+        .lane {
+            width: 33.333%;
+            height: 100%;
+            border-left: 2px dashed var(--white-trans-low);
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s ease-in-out;
+            display: flex; /* 用于放置选项框 */
+            justify-content: center; /* 选项框居中 */
+            align-items: center; /* 选项框居中 */
+        }
+        .lane:first-child { border-left: none; }
+        .lane:hover { background: rgba(255, 255, 255, 0.1); } /* 悬停效果 */
+
+        /* 选项盒子 */
+        .option-box {
+            position: absolute;
+            top: -250px; /* 从屏幕外上方开始 */
+            left: 5%; /* 左右留边 */
+            width: 90%; /* 宽度占跑道的大部分 */
+            height: 160px; /* 增加高度 */
+            background: var(--white-trans-mid); /* 半透明背景 */
+            border: 3px solid var(--white); /* 白色边框 */
+            border-radius: 12px; /* 圆角 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 18px; /* 稍大字体 */
+            font-weight: bold;
+            padding: 10px 15px;
+            pointer-events: none; /* 事件穿透给父级 .lane */
+            line-height: 1.4; /* 行高 */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); /* 添加阴影 */
+        }
+        
+        /* 选项移动动画 */
+        .game-area.running .option-box {
+            animation: move-down 4s linear forwards; /* 默认速度 */
+        }
+
+        @keyframes move-down {
+            from { top: -250px; }
+            to { top: 115vh; } /* 确保完全移出屏幕底部 */
+        }
+
+        /* 奔跑的小人 */
+        .runner {
+            position: absolute;
+            bottom: 10%; /* 固定在屏幕下方 */
+            width: 50px; /* 稍大一点 */
+            height: 70px;
+            z-index: 100;
+            transition: left 0.25s ease-out; /* 移动动画 */
+            pointer-events: none; /* 小人本身不接受点击 */
+        }
+
+        .runner-head { width: 25px; height: 25px; background: var(--white); border-radius: 50%; margin: 0 auto; }
+        .runner-body { width: 5px; height: 30px; background: var(--white); margin: 0 auto; }
+        .runner-legs { display: flex; justify-content: center; gap: 10px; margin-top: -2px;}
+        .leg { width: 5px; height: 18px; background: var(--white); animation: run 0.35s infinite alternate; }
+        .leg:nth-child(2) { animation-delay: 0.175s; }
+        @keyframes run { from { transform: rotate(-40deg); } to { transform: rotate(40deg); } }
+
+
+        /* 右侧时间轴 */
+        .timeline {
+            width: 300px; /* 默认宽度 */
+            background: var(--primary-orange); /* 使用主橙色作为背景 */
+            opacity: 0.9;
+            padding: 20px;
+            overflow-y: auto;
+            scroll-behavior: smooth; /* 平滑滚动 */
+            border-left: 4px solid var(--white); /* 分隔线 */
+        }
+        .timeline-item { 
+            margin: 15px 0; 
+            padding: 15px 12px; 
+            background: var(--cream); /* 米白背景 */
+            border-radius: 10px; 
+            border: 2px solid var(--primary-orange); /* 橙色边框 */
+            transition: all 0.3s ease-in-out;
+            min-height: 90px; /* 最小高度 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* 文本居中 */
+            align-items: center; /* 文本居中 */
+            text-align: center;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2); /* 阴影 */
+        }
+        .timeline-item.active { 
+            animation: blink 1.2s infinite; 
+            transform: scale(1.1); 
+            background: var(--white-trans-high); /* 高透明度白色 */
+            border-color: var(--white);
+            box-shadow: 0 0 25px var(--white); /* 闪烁光晕 */
+        }
+        .timeline-item.completed { 
+            opacity: 0.6; 
+            background: var(--light-green); /* 完成项使用浅绿色 */
+            transform: scale(0.95);
+            border-color: var(--light-green);
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3); /* 内阴影 */
+        }
+        @keyframes blink { 
+            0%, 100% { box-shadow: 0 0 15px rgba(255, 255, 255, 0.7); } 
+            50% { box-shadow: 0 0 40px rgba(255, 255, 255, 1); } 
+        }
+        .year { 
+            font-size: 26px; /* 大一点的年份 */
+            font-weight: bold; 
+            margin-bottom: 5px; 
+            color: var(--primary-orange); /* 橙色年份 */
+        }
+
+        /* 覆盖层 (开始/结束/难度选择) */
+        .overlay {
+            position: absolute; 
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--black-overlay);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 1000; 
+            transition: opacity 0.5s ease-in-out;
+            padding: 20px; /* 增加内边距 */
+        }
+        .overlay.hidden { opacity: 0; pointer-events: none; }
+        .overlay h1 { font-size: 52px; margin-bottom: 25px; color: var(--cream); }
+        .overlay h2 { font-size: 50px; margin-bottom: 25px; color: var(--primary-orange); }
+        .overlay p { 
+            font-size: 20px; 
+            margin-bottom: 40px; 
+            text-align: center; 
+            line-height: 1.6; 
+            max-width: 600px; 
+            padding: 0 30px;
+        }
+        .overlay p strong { color: var(--peachy-orange); font-size: 22px; }
+        .overlay p strong.key { color: var(--primary-orange); font-size: 24px; }
+
+        /* 按钮 */
+        button {
+            padding: 15px 40px; 
+            font-size: 26px; 
+            background: var(--white); 
+            color: var(--primary-orange);
+            border: none; 
+            border-radius: 12px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 5px 15px rgba(255,255,255,0.3);
+        }
+        button:hover { 
+            transform: translateY(-3px) scale(1.05); 
+            box-shadow: 0 8px 20px rgba(255, 255, 255, 0.5);
+        }
+        
+        /* 难度选择 */
+        .difficulty-selection {
+            margin-top: 30px; /* 【调整】增加顶部外边距 */
+            margin-bottom: 30px; /* 【新增】增加底部外边距，与开始按钮分隔 */
+            font-size: 22px;
+            color: var(--cream);
+        }
+        .difficulty-selection span { margin-right: 15px; }
+        .difficulty-btn {
+            padding: 10px 25px;
+            font-size: 22px;
+            background: var(--cream);
+            color: var(--primary-orange);
+            margin: 0 8px;
+            box-shadow: 0 3px 10px rgba(255,255,255,0.2);
+        }
+        .difficulty-btn.active {
+            background: var(--peachy-orange);
+            color: var(--white);
+            box-shadow: 0 3px 15px rgba(255,174,101,0.5);
+        }
+
+
+        /* ========== 响应式设计 ========== */
+        
+        /* 平板及大屏幕手机 */
+        @media screen and (max-width: 1024px) {
+            .game-title { font-size: 30px; }
+            .score { font-size: 20px; }
+            .header-info { top: 15px; }
+            
+            #result-message { font-size: 60px; }
+            
+            .timeline {
+                width: 250px; /* 缩小时间轴 */
+                padding: 15px;
+            }
+            .timeline-item { 
+                padding: 12px 10px; 
+                min-height: 80px; 
+                font-size: 16px;
+            }
+            .year { font-size: 22px; }
+            
+            .option-box {
+                font-size: 16px;
+                height: 140px;
+                padding: 10px 12px;
+                border-width: 2.5px;
+            }
+            
+            .runner { width: 45px; height: 65px; bottom: 9%; }
+            .runner-head { width: 22px; height: 22px;}
+            .runner-body { height: 28px; }
+            .leg { height: 16px; }
+            
+            .overlay h1 { font-size: 46px; }
+            .overlay h2 { font-size: 45px; }
+            .overlay p { font-size: 18px; }
+            .overlay p strong { font-size: 20px; }
+            button { padding: 12px 35px; font-size: 24px; }
+            .difficulty-selection { font-size: 20px; margin-top: 25px; margin-bottom: 25px;}
+            .difficulty-btn { font-size: 20px; padding: 8px 20px;}
+        }
+
+        /* 手机 */
+        @media screen and (max-width: 768px) {
+            .game-title { font-size: 24px; }
+            .score { font-size: 18px; }
+            
+            #result-message { font-size: 50px; }
+            
+            .timeline {
+                width: 160px; /* 进一步缩小时间轴 */
+                padding: 10px;
+            }
+            .timeline-item { 
+                margin: 12px 0;
+                padding: 10px 8px; 
+                min-height: 70px; 
+                font-size: 14px;
+            }
+            .year { font-size: 20px; }
+            
+            .option-box {
+                font-size: 13px;
+                height: 110px;
+                padding: 8px 10px;
+                border-width: 2px;
+            }
+            
+            .runner { width: 40px; height: 60px; bottom: 8%; }
+            .runner-head { width: 20px; height: 20px;}
+            .runner-body { height: 25px; }
+            .leg { height: 15px; }
+            
+            .overlay h1, .overlay h2 { font-size: 36px; }
+            .overlay p { font-size: 16px; margin-bottom: 30px;}
+            .overlay p strong { font-size: 18px; }
+            button { 
+                padding: 10px 30px; 
+                font-size: 22px; 
+            }
+            .difficulty-selection { font-size: 18px; margin-top: 20px; margin-bottom: 20px;}
+            .difficulty-btn { font-size: 18px; padding: 8px 18px;}
+        }
+
+        /* 超小屏幕手机 */
+        @media screen and (max-width: 480px) {
+            .timeline { width: 120px; padding: 8px 5px; }
+            .timeline-item { 
+                margin: 10px 0;
+                padding: 8px 5px; 
+                min-height: 60px; 
+                font-size: 11px; 
+            }
+            .year { font-size: 16px; }
+            
+            .option-box { 
+                font-size: 11px; 
+                height: 90px; 
+                padding: 5px 8px;
+                left: 3%; width: 94%;
+            }
+            
+            .runner { width: 35px; height: 55px; bottom: 7%; }
+            
+            .overlay h1, .overlay h2 { font-size: 32px; }
+            .overlay p { font-size: 15px; margin-bottom: 25px; padding: 0 15px;}
+            .overlay p strong { font-size: 17px; }
+            button { padding: 8px 25px; font-size: 20px; }
+            .difficulty-selection { font-size: 16px; margin-top: 15px; margin-bottom: 15px;}
+            .difficulty-btn { font-size: 16px; padding: 6px 15px;}
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- 开始屏幕 -->
+        <div class="overlay" id="startScreen">
+            <h1>📚 七下历史时间轴跑酷游戏</h1>
+            <p>
+                游戏规则：<br>
+                使用键盘 <strong>← →</strong> 左右箭头，<br>
+                <strong>或直接点击/触摸跑道</strong>来移动小人。<br>
+                根据右侧闪烁的年份，<br>
+                在选项到达底部前选择正确的历史事件！<br>
+                答对后时间轴会向上推进。
+            </p>
+            <!-- 难度选择 -->
+            <div class="difficulty-selection">
+                <span>选择难度：</span>
+                <button class="difficulty-btn active" data-speed="5000">简单</button>
+                <button class="difficulty-btn" data-speed="4000">普通</button>
+                <button class="difficulty-btn" data-speed="2500">困难</button>
+            </div>
+            <button id="startGameBtn">开始游戏</button>
+        </div>
+
+        <!-- 游戏结束屏幕 -->
+        <div class="overlay hidden" id="gameOver">
+            <h2 id="gameOverTitle">游戏结束！</h2>
+            <p>你的得分：<span id="finalScore"></span></p>
+            <button onclick="restartGame()">再来一局</button>
+        </div>
+
+        <!-- 头部信息 -->
+        <div class="header-info">
+            <div class="game-title">七下历史时间轴跑酷游戏</div>
+            <div class="score">得分：<span id="score">0</span> / <span id="total">0</span></div>
+        </div>
+        
+        <!-- 结果提示 -->
+        <div id="result-message"></div>
+
+        <!-- 游戏跑道区域 -->
+        <div class="game-area" id="gameArea">
+            <div class="lane" onclick="selectLane(0)"><div class="option-box" id="option0"></div></div>
+            <div class="lane" onclick="selectLane(1)"><div class="option-box" id="option1"></div></div>
+            <div class="lane" onclick="selectLane(2)"><div class="option-box" id="option2"></div></div>
+            
+            <div class="runner" id="runner">
+                <div class="runner-head"></div><div class="runner-body"></div><div class="runner-legs"><div class="leg"></div><div class="leg"></div></div>
+            </div>
+        </div>
+
+        <!-- 右侧时间轴 -->
+        <div class="timeline" id="timeline"></div>
+    </div>
+
+    <script>
+        // --- 数据 ---
+        const historyData = [
+            // 隋唐时期
+            { year: 581, event: "隋朝建立" },
+            { year: 589, event: "隋朝统一全国" },
+            { year: 618, event: "隋朝灭亡、唐朝建立" },
+            { year: 755, event: "安史之乱（唐朝由盛转衰）" },
+            { year: 878, event: "黄巢起义（打击唐朝统治）" },
+            { year: 907, event: "唐朝灭亡，进入五代十国" },
+
+            // 辽宋夏金元时期
+            { year: 916, event: "辽（契丹）建立" },
+            { year: 960, event: "北宋建立" },
+            { year: 1005, event: "辽宋《澶渊之盟》" },
+            { year: 1038, event: "西夏建立" },
+            { year: 1115, event: "金（女真）建立" },
+            { year: 1125, event: "金灭辽" },
+            { year: 1127, event: "金灭北宋、南宋建立" },
+            { year: 1141, event: "宋金绍兴和议" },
+            { year: 1206, event: "蒙古政权建立" },
+            { year: 1227, event: "蒙古灭西夏" },
+            { year: 1234, event: "蒙古灭金" },
+            { year: 1271, event: "元朝建立" },
+            { year: 1276, event: "元灭南宋" },
+            { year: 1279, event: "元朝统一全国" },
+
+            // 明清时期
+            { year: 1368, event: "明朝建立" },
+            { year: 1405, event: "郑和下西洋" },
+            { year: 1421, event: "明朝迁都北京" },
+            { year: 1616, event: "努尔哈赤建立后金" },
+            { year: 1636, event: "皇太极改国号为清" },
+            { year: 1644, event: "李自成灭明朝、清军入关" },
+            { year: 1662, event: "郑成功收复台湾" },
+            { year: 1684, event: "清朝设台湾府" },
+            { year: 1689, event: "中俄《尼布楚条约》" },
+            { year: 1727, event: "清朝设驻藏大臣" },
+            { year: 1840, event: "鸦片战争" },
+            { year: 1912, event: "清朝灭亡" }
+        ];
+
+        // 干扰项（需要根据上面的事件精心设计）
+        const distractors = [
+            // 隋唐
+            "隋炀帝开凿大运河", "科举制度开始实行", "玄武门之变", "唐玄宗统治时期",
+            "武则天称帝", "贞观之治达到顶峰", "开元盛世", "丝绸之路贸易繁荣",
+            "陈胜吴广起义", "楚汉争霸", "赤壁之战", "三国归晋",
+            // 辽宋夏金元
+            "王安石变法", "岳飞抗金", "文天祥抵抗元军", "忽必烈登基",
+            "盘古开天辟地", "女娲补天", "精卫填海", "大禹治水",
+            // 明清
+            "朱元璋发动起义", "元朝攻占江南", "明成祖登基", "海禁政策",
+            "张居正改革", "东林党争", "甲午战争", "第二次鸦片战争",
+            "虎门销烟", "辛亥革命", "五四运动", "南京条约",
+            "八国联军侵华", "太平天国运动", "洋务运动", "戊戌变法",
+            "三国演义问世", "红楼梦创作", "西游记完成", "水浒传出版"
+        ];
+
+        // --- 游戏变量 ---
+        let currentQuestion = 0;
+        let score = 0;
+        let correctAnswerIndex = 0;
+        let gameActive = false; // 控制游戏是否可交互
+        let currentLane = 1;    // 当前小人所在跑道 (0:左, 1:中, 2:右)
+        let GAME_SPEED = 4000;  // 默认速度（普通）
+        let animationFrameId = null; // 用于取消动画
+
+        // --- DOM 元素 ---
+        const runner = document.getElementById('runner');
+        const gameArea = document.getElementById('gameArea');
+        const timelineDiv = document.getElementById('timeline');
+        const optionBoxes = [
+            document.getElementById('option0'), 
+            document.getElementById('option1'), 
+            document.getElementById('option2')
+        ];
+        const resultMessage = document.getElementById('result-message');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverDiv = document.getElementById('gameOver');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const difficultyButtons = document.querySelectorAll('.difficulty-btn');
+
+        // --- 控制器 ---
+        
+        // 选择跑道 (鼠标/触摸)
+        function selectLane(laneIndex) {
+            if (!gameActive) return;
+            currentLane = laneIndex;
+            moveRunner();
+        }
+
+        // 键盘事件处理
+        document.addEventListener('keydown', handleKeyPress);
+        function handleKeyPress(e) {
+            if (!gameActive) return;
+            if (e.key === 'ArrowLeft') {
+                currentLane = Math.max(0, currentLane - 1);
+            } else if (e.key === 'ArrowRight') {
+                currentLane = Math.min(2, currentLane + 1);
+            }
+            moveRunner();
+        }
+
+        // --- 核心游戏逻辑 ---
+        
+        // 移动小人到指定跑道
+        function moveRunner() {
+            const laneWidth = gameArea.offsetWidth / 3;
+            const targetLeft = (currentLane * laneWidth) + (laneWidth / 2) - (runner.offsetWidth / 2);
+            runner.style.left = `${targetLeft}px`;
+        }
+
+        // 初始化游戏设置
+        function initGame() {
+            // 渲染时间轴 (按时间顺序)
+            timelineDiv.innerHTML = '';
+            historyData.forEach((item, index) => {
+                timelineDiv.innerHTML += `<div class="timeline-item" id="timeline-${index}"><div class="year">${item.year}</div></div>`;
+            });
+
+            currentQuestion = 0;
+            score = 0;
+            currentLane = 1; // 重置到中间跑道
+            moveRunner(); // 小人回到中间
+            updateScore();
+            timelineDiv.scrollTop = 0; // 时间轴滚动到顶部
+            
+            // 移除之前的动画帧（如果存在）
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            loadQuestion(); // 加载第一个问题
+        }
+
+        // 加载当前问题
+        function loadQuestion() {
+            if (currentQuestion >= historyData.length) {
+                endGame(true); // 所有问题完成
+                return;
+            }
+            
+            // 准备开始新的动画
+            gameArea.classList.remove('running');
+            void gameArea.offsetWidth; // 强制浏览器重绘，重置动画状态
+
+            // 滚动时间轴到当前问题
+            scrollToCurrentQuestion();
+
+            // 更新时间轴的视觉状态 (active, completed)
+            document.querySelectorAll('.timeline-item').forEach((item, i) => {
+                item.classList.remove('active', 'completed');
+                if (i < currentQuestion) {
+                    item.classList.add('completed');
+                } else if (i === currentQuestion) {
+                    item.classList.add('active');
+                }
+            });
+
+            // 准备问题选项
+            const current = historyData[currentQuestion];
+            const options = [current.event];
+            
+            // 随机选取干扰项
+            const tempDistractors = [...distractors].filter(d => d !== current.event);
+            while (options.length < 3) {
+                const randIndex = Math.floor(Math.random() * tempDistractors.length);
+                // 确保不重复添加干扰项
+                if (!options.includes(tempDistractors[randIndex])) {
+                    options.push(tempDistractors.splice(randIndex, 1)[0]);
+                }
+            }
+
+            // 打乱选项顺序
+            options.sort(() => Math.random() - 0.5);
+            correctAnswerIndex = options.indexOf(current.event); // 记录正确答案的索引
+
+            // 显示选项文字
+            options.forEach((opt, i) => { optionBoxes[i].textContent = opt; });
+
+            // 延迟一小段时间后开始动画，给玩家反应和准备的时间
+            setTimeout(() => {
+                gameActive = true; // 游戏变为可交互
+                gameArea.classList.add('running'); // 启动选项向下移动动画
+                
+                // 设置定时器，在动画结束时检查答案
+                // GAME_SPEED 变量来自难度选择
+                animationFrameId = setTimeout(checkAnswer, GAME_SPEED);
+            }, 500); // 延迟 500ms
+        }
+
+        // 滚动时间轴到当前问题
+        function scrollToCurrentQuestion() {
+            const currentItem = document.getElementById(`timeline-${currentQuestion}`);
+            if (currentItem) {
+                // 滚动到当前项目，并留出一点顶部空间
+                const offsetTop = currentItem.offsetTop - 20;
+                timelineDiv.scrollTo({
+                    top: offsetTop,
+                    behavior: 'smooth'
+                });
+            }
+        }
+
+        // 检查玩家答案
+        function checkAnswer() {
+            gameActive = false; // 暂停玩家输入，防止连点
+            
+            if (currentLane === correctAnswerIndex) { // 玩家选对了
+                score++;
+                updateScore();
+                showResultMessage(true); // 显示正确提示
+                
+                // 准备下一题
+                setTimeout(() => {
+                    currentQuestion++;
+                    loadQuestion(); // 加载下一题
+                }, 1200); // 稍作停留后进入下一题
+            } else { // 玩家选错了
+                showResultMessage(false); // 显示错误提示
+                
+                // 游戏结束
+                setTimeout(() => {
+                    endGame(false);
+                }, 1500); // 显示错误提示后结束游戏
+            }
+        }
+        
+        // 显示“正确”或“错误”提示
+        function showResultMessage(isCorrect) {
+            resultMessage.textContent = isCorrect ? "✓ 正确!" : "✗ 错误!";
+            resultMessage.className = isCorrect ? 'show correct' : 'show wrong';
+            setTimeout(() => { 
+                resultMessage.className = ''; // 800ms后隐藏提示
+            }, 800);
+        }
+
+        // 更新显示的分数
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('total').textContent = historyData.length;
+        }
+
+        // 游戏结束处理
+        function endGame(isWin) {
+            gameActive = false;
+            if (animationFrameId) { // 清除可能存在的检查答案定时器
+                clearTimeout(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            const gameOverTitle = document.getElementById('gameOverTitle');
+            const finalScoreSpan = document.getElementById('finalScore');
+            
+            if (isWin) {
+                gameOverTitle.textContent = '🎉 恭喜通关！';
+                finalScoreSpan.textContent = `${score} / ${historyData.length} (满分!)`;
+            } else {
+                gameOverTitle.textContent = '💪 继续加油！';
+                finalScoreSpan.textContent = `${score} / ${historyData.length}`;
+            }
+            gameOverDiv.classList.remove('hidden'); // 显示游戏结束界面
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            gameOverDiv.classList.add('hidden'); // 隐藏结束界面
+            startGameBtn.click(); // 模拟点击开始按钮，重新初始化游戏
+        }
+        
+        // --- 初始化和事件绑定 ---
+        
+        // 设置难度按钮的点击事件
+        difficultyButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                // 移除所有按钮的 active class
+                difficultyButtons.forEach(btn => btn.classList.remove('active'));
+                // 为被点击的按钮添加 active class
+                button.classList.add('active');
+                // 设置 GAME_SPEED
+                GAME_SPEED = parseInt(button.getAttribute('data-speed'));
+            });
+        });
+
+        // 开始游戏按钮点击事件
+        startGameBtn.addEventListener('click', () => {
+            startScreen.classList.add('hidden'); // 隐藏开始屏幕
+            setTimeout(() => {
+                initGame(); // 初始化游戏
+                gameActive = true; // 激活游戏交互
+            }, 500); // 等待淡出动画
+        });
+
+        // 初始加载时，确保第一个难度按钮是激活状态
+        document.addEventListener('DOMContentLoaded', () => {
+            // 查找默认激活的按钮（通常是第一个）
+            const activeButton = document.querySelector('.difficulty-btn.active');
+            if (activeButton) {
+                GAME_SPEED = parseInt(activeButton.getAttribute('data-speed'));
+            } else {
+                // 如果没有默认激活的，则给第一个按钮设置默认值
+                const firstButton = document.querySelector('.difficulty-btn');
+                if (firstButton) {
+                    firstButton.classList.add('active');
+                    GAME_SPEED = parseInt(firstButton.getAttribute('data-speed'));
+                }
+            }
+        });
+    </script>
+</body>
+</html>
